@@ -1,0 +1,32 @@
+		WTI crude spot price forecasting
+
+	correlated indicators:
+Cushing and US crude oil inventories - typically has strong negative correlation to prices, tight supply can prompt futures prices to rise and surplus can crash prices (see 2020 pandemic)
+Brent crude spot price - slightly heavier and sourer crude oil than WTI crude but still classified as a light, sweet crude oil like WTI (premium grade), large change in their spread affects demand accordingly, keeping them in line
+OPEC production quotas - OPEC produced ~32% of the world's crude oil this year and aim to stabilise fluctuations in oil prices, typically announcements of production quotas have an inverse relation to crude oil prices
+refinery input - refinery input can signal changes in supply and demand for oil and tends to drive prices
+
+	exploratory data analysis:
+data was sampled from 2011-2026
+
+WTI Crude Oil Spot Price - daily history (DCOILWTICO):
+data is indexed by business days (no weekends)
+missing data (major holidays, etc, 3.93% of data missing acceptable)
+imputation, linear interpolation suitable for small gaps of missing data, for larger gaps of data other techniques such as regression imputation (use correlated data like Brent crude) or EM algorithms are more suitable
+data has 140 singletons missing and 7 gaps with two data points in a row missing, used linear interpolation to impute values
+
+spot prices mostly driven by geopolitical events and supply-demand imbalances
+additive seasonal decomposition - annual seasonal strength of 0.2076 (fairly low, expected), weekly seasonal strength of 0
+
+Brent Crude Oil Spot Price - daily history (DCOILBRENTEU):
+similar to WTI, slightly less missing data (2.94%)
+annual seasonal strength of 0.1026, lower than WTI due to being globally traded with more international demand - less affected by localized factors such as weather patterns
+
+US Ending Stocks of Crude Oil and Petroleum Products (inc. SPR) - weekly history
+
+US Ending Stocks of Crude Oil and Petroleum Products (excl. SPR) - weekly history
+
+US Gross Inputs to Refineries - monthly history
+
+	forecasting model training:
+- in progress

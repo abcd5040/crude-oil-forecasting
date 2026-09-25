@@ -24,15 +24,17 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 
 def get_WTI_data():
-    df = pd.read_csv("C:\\Users\\Joshua Liang\\Desktop\\crude oil forecasting\\DCOILWTICO.csv")
-    df['observation_date'] = pd.to_datetime(df['observation_date'])
-    df = df.set_index('observation_date') # indexing is required for time-based interpolation
+    df = pd.read_csv("C:\\Users\\Joshua Liang\\Desktop\\crude oil forecasting\\Cushing_OK_WTI_Spot_Price_FOB.csv")
+    df['Day'] = pd.to_datetime(df['Day'])
+    df = df.set_index('Day') # indexing is required for time-based interpolation
+    df = df.reindex(index=df.index[::-1])
     return df 
 
 def get_Brent_data():
-    df = pd.read_csv("C:\\Users\\Joshua Liang\\Desktop\\crude oil forecasting\\DCOILBRENTEU.csv")
-    df['observation_date'] = pd.to_datetime(df['observation_date'])
-    df = df.set_index('observation_date') # indexing is required for time-based interpolation
+    df = pd.read_csv("C:\\Users\\Joshua Liang\\Desktop\\crude oil forecasting\\Europe_Brent_Spot_Price_FOB.csv")
+    df['Day'] = pd.to_datetime(df['Day'])
+    df = df.set_index('Day') # indexing is required for time-based interpolation
+    df = df.reindex(index=df.index[::-1])
     return df 
 
 def get_refinery_US_data():
@@ -69,7 +71,7 @@ def plot_df(df, x, y, title="", xlabel='timestamp', ylabel='sell', dpi=100):
 
     plt.gca().set(title=title, xlabel=xlabel, ylabel=ylabel)
     plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d-%Y'))
     plt.gcf().autofmt_xdate()  # Rotation
     plt.margins(x=0)
 
@@ -136,17 +138,41 @@ def test_stationarity(series):
     
     print("\n")
 
+def plot_ccf(exog, target, ax, exog_name):
+    max_lag = 30
+    lags = np.arange(-max_lag, 1) # negative lags to prevent lookahead bias
+    ccf_values = []
+
+    for lag in lags:
+        if lag < 0:
+            c = np.corrcoef(exog.iloc[:lag], target.iloc[-lag:])[0, 1]
+        else:
+            c = np.corrcoef(exog, target)[0, 1]
+        ccf_values.append(c)
+
+    # calculate 95% confidence interval bounds
+    conf_interval = 1.96 / np.sqrt(len(exog))
+
+    # plot CCF on the specific axis object
+    ax.stem(lags, ccf_values)
+    ax.axhline(y=conf_interval, color="r", linestyle="--", label="95% CI")
+    ax.axhline(y=-conf_interval, color="r", linestyle="--")
+    ax.axhline(y=0, color="black", linewidth=0.8)
+
+    ax.set_title(f"CCF for {exog_name}, Cushing OK WTI")
+    ax.set_xlabel("Lag")
+    ax.set_ylabel("Correlation Coefficient")
+    ax.grid(True, linestyle=":", alpha=0.6)
+
 # ----- main -----
 
-b_days = pd.date_range(start='2011-07-20', end='2026-05-31', freq='B') # truncated data to May as refinery data is only available up to May 2026
-
 df = get_WTI_data()
-df['DCOILWTICO'] = df['DCOILWTICO'].interpolate(method='time') # linear interpolation
-#EDA(df, 'DCOILWTICO', cycle=261)
+#df['Cushing OK WTI Spot Price FOB (Dollars per Barrel)'] = df['Cushing OK WTI Spot Price FOB (Dollars per Barrel)'].interpolate(method='time')
+#EDA(df, 'Cushing OK WTI Spot Price FOB (Dollars per Barrel)', cycle=261)
 
 df_e1 = get_Brent_data()
-df_e1['DCOILBRENTEU'] = df_e1['DCOILBRENTEU'].interpolate(method='time')
-#EDA(df_e1, 'DCOILBRENTEU', cycle=261)
+#df_e1['Europe Brent Spot Price FOB (Dollars per Barrel)'] = df_e1['Europe Brent Spot Price FOB (Dollars per Barrel)'].interpolate(method='time')
+#EDA(df_e1, 'Europe Brent Spot Price FOB (Dollars per Barrel)', cycle=261)
 
 df_e2 = get_US_inv_no_SPR_data()
 #EDA(df_e2, 'Weekly U.S. Ending Stocks excluding SPR of Crude Oil and Petroleum Products (Thousand Barrels)', cycle=52)
@@ -157,19 +183,16 @@ df_e3 = get_refinery_US_data()
 df_e4 = get_Cushing_inv_data()
 #EDA(df_e4, 'Weekly Cushing OK Ending Stocks excluding SPR of Crude Oil (Thousand Barrels)', cycle=52)
 
-# aligning data:
-# capture target boundary thresholds
-start_bound, end_bound = b_days.min(), b_days.max()
+b_days = pd.date_range(start='2005-05-31', end='2026-05-31', freq='B') # truncated data to May as refinery data is only available up to May 2026
 
+# aligning data:
 # reindex target data and check for stationarity 
 df = df.reindex(b_days)
-df = df['DCOILWTICO']
+df = df.asfreq('B')
+df = df.ffill() 
+df = df['Cushing OK WTI Spot Price FOB (Dollars per Barrel)']
 
 # test_stationarity(df)
-
-# apply first-order differencing
-# df_diff = df.diff()
-# test_stationarity(df_diff)
 
 # consolidate datasets into a dictionary
 raw_exog_dict = {
@@ -184,62 +207,81 @@ aligned_features = {}
 for name, dataframe in raw_exog_dict.items():
     # force alignment to the time index
     aligned = dataframe.reindex(df.index)
+    aligned = aligned.asfreq('B')  
     filled = aligned.ffill()
 
-    # lag to eliminate lookahead bias and compensate for info processing delays, etc
-    shifted = filled.shift(3)
+    for col in filled.columns:
+        aligned_features[col] = filled[col]
 
-    for col in shifted.columns:
-        aligned_features[col] = shifted[col]
-
-# merging into final array
 X_matrix = pd.DataFrame(aligned_features)
-final_dataset = pd.concat([df, X_matrix], axis=1).dropna()
 
 # drop rows with NaN values in either df or X_matrix
 combined_mask = df.notna() & X_matrix.notna().all(axis=1) 
 df = df.loc[combined_mask]
 X_matrix = X_matrix.loc[combined_mask]
 
-scaler = StandardScaler() # normalization step
-X_scaled_values = scaler.fit_transform(X_matrix)
+scaler = StandardScaler() # normalization step (fit on training data only)
+scaler.fit(X_matrix.loc[:'2024-12-31'])
+X_scaled_values = scaler.transform(X_matrix)
 X_matrix = pd.DataFrame(X_scaled_values, index=X_matrix.index, columns=X_matrix.columns)
 
-# check_feature_redundancy(X_matrix)
+# differencing all series
+df_diff = df.diff().dropna()
+X_matrix_diff = X_matrix.diff().dropna()
+
+# plot CCF for each feature against the target variable
+cols = X_matrix_diff.columns
+n_vars = len(cols)
+
+fig, axes = plt.subplots(3, 1, figsize=(18, 4), layout="constrained")
+
+# plot each feature
+for i, col in enumerate(cols):
+    plot_ccf(X_matrix_diff[col], df_diff, axes[i], col)
+
+plt.show()
+
+# apply appropriate lags based on CCF plots
+X_matrix['Europe Brent Spot Price FOB (Dollars per Barrel)'] = X_matrix['Europe Brent Spot Price FOB (Dollars per Barrel)'].shift(8) # lag to account for information delay (not 0)
+X_matrix['Weekly U.S. Ending Stocks excluding SPR of Crude Oil and Petroleum Products (Thousand Barrels)'] = X_matrix['Weekly U.S. Ending Stocks excluding SPR of Crude Oil and Petroleum Products (Thousand Barrels)'].shift(11)
+X_matrix['Weekly Cushing OK Ending Stocks excluding SPR of Crude Oil (Thousand Barrels)'] = X_matrix['Weekly Cushing OK Ending Stocks excluding SPR of Crude Oil (Thousand Barrels)'].shift(11)
+
+combined_mask = df.notna() & X_matrix.notna().all(axis=1) 
+df = df.loc[combined_mask]
+X_matrix = X_matrix.loc[combined_mask]
+
+check_feature_redundancy(X_matrix)
 
 # X_matrix represents all collected data, separate into training and testing sets
-X_train = X_matrix.loc[:'2025-12-31']
-X_test = X_matrix.loc['2026-01-01':]
-df_train = df.loc[:'2025-12-31']
-df_test = df.loc['2026-01-01':]
+X_train = X_matrix.loc[:'2024-12-31']
+X_test = X_matrix.loc['2025-01-01':]
+df_train = df.loc[:'2024-12-31']
+df_test = df.loc['2025-01-01':]
 
 # determine the appropriate ARIMA orders (p, d, q) using ACF and PACF plots
-# apply a first-difference for stationarity
-# stationary_target = df_train.diff().dropna()
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 5))
 
-# fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 5))
+plot_acf(df_train.diff().dropna(), lags=40, ax=ax1, alpha=0.05)
+ax1.set_title("Autocorrelation Function (ACF) - Identifies 'q'")
+ax1.set_xlabel("Lags")
+ax1.set_ylabel("Correlation Coefficient")
+ax1.grid(True, linestyle="--", alpha=0.5)
 
-# plot_acf(stationary_target, lags=40, ax=ax1, alpha=0.05)
-# ax1.set_title("Autocorrelation Function (ACF) - Identifies 'q'")
-# ax1.set_xlabel("Lags")
-# ax1.set_ylabel("Correlation Coefficient")
-# ax1.grid(True, linestyle="--", alpha=0.5)
+plot_pacf(df_train.diff().dropna(), lags=40, ax=ax2, alpha=0.05, method="ywm")
+ax2.set_title("Partial Autocorrelation Function (PACF) - Identifies 'p'")
+ax2.set_xlabel("Lags")
+ax2.set_ylabel("Partial Correlation Coefficient")
+ax2.grid(True, linestyle="--", alpha=0.5)
 
-# plot_pacf(stationary_target, lags=40, ax=ax2, alpha=0.05, method="ywm")
-# ax2.set_title("Partial Autocorrelation Function (PACF) - Identifies 'p'")
-# ax2.set_xlabel("Lags")
-# ax2.set_ylabel("Partial Correlation Coefficient")
-# ax2.grid(True, linestyle="--", alpha=0.5)
-
-# plt.tight_layout()
-# plt.show()
+plt.tight_layout()
+plt.show()
 
 # fitting to ARIMAX model
-arimax_model = ARIMA(df_train, exog=X_train, order=(0, 1, 1))
+arimax_model = ARIMA(df_train, exog=X_train, order=(1, 1, 1))
 arimax_results = arimax_model.fit(method="innovations_mle")
 arimax_residuals = arimax_results.resid
 
-# print(arimax_results.summary())
+print(arimax_results.summary())
 
 # skewed Student's t-distribution (for heavy kurtosis and -6.13 skew)
 garch_skewt_model = arch_model(arimax_residuals, p=1, q=1, vol='GARCH', dist='skewt')
@@ -248,31 +290,29 @@ garch_skewt_result = garch_skewt_model.fit(disp='off')
 print(garch_skewt_result.summary())
 
 # conditional volatility (standard deviation scale)
-# conditional_vol = garch_skewt_result.conditional_volatility
+conditional_vol = garch_skewt_result.conditional_volatility
 
-# plt.figure(figsize=(12, 5))
-# plt.plot(conditional_vol, color='darkred', label='GARCH Conditional Volatility')
-# plt.title('Time-Varying Volatility Clustering (ARIMAX-GARCH)')
-# plt.xlabel('Observations')
-# plt.ylabel('Volatility')
-# plt.legend()
-# plt.grid(True, alpha=0.3)
-# plt.show()
+plt.figure(figsize=(12, 5))
+plt.plot(conditional_vol, color='darkred', label='GARCH Conditional Volatility')
+plt.title('Time-Varying Volatility Clustering (ARIMAX-GARCH)')
+plt.xlabel('Observations')
+plt.ylabel('Volatility')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.show()
 
-test_window = 100
+test_window = len(df_test)  # number of test samples
 train_end_idx = len(df_train)
 
 model_predictions = []
 naive_predictions = []
 actual_values = []
 
-
 print("rolling backtest:")
-
 for i in range(test_window):
     # split data dynamically (expanding window)
-    current_train_y = df.iloc[train_end_idx + i:]
-    current_train_exog = X_matrix.iloc[train_end_idx + i:]
+    current_train_y = df.iloc[:train_end_idx + i]
+    current_train_exog = X_matrix.iloc[:train_end_idx + i]
     
     actual_val = df_test.iloc[i]
     actual_values.append(actual_val)
@@ -284,8 +324,8 @@ for i in range(test_window):
     future_exog = X_test.iloc[i]
     
     try:
-        # fit ARIMAX(0,1,1) on the current training window
-        model = ARIMA(endog=current_train_y, exog=current_train_exog, order=(0, 1, 1))
+        # fit ARIMAX(1,1,1) on the current training window
+        model = ARIMA(endog=current_train_y, exog=current_train_exog, order=(1, 1, 1))
         model_fit = model.fit()
         
         # forecast 1 step ahead
@@ -314,6 +354,20 @@ results_df = pd.DataFrame({
     'ARIMAX Model': [mae_model, rmse_model],
     'Naive Baseline': [mae_naive, rmse_naive]
 }).set_index('Metric')
+
+plt.figure(figsize=(15,4), dpi=100)
+plt.plot(df_test.index, actuals, color='tab:red', label='Cushing OK WTI')
+plt.plot(df_test.index, preds_model, color='tab:green', label='ARIMAX Model')
+plt.plot(df_test.index, preds_naive, color='tab:blue', label='Naive Baseline (same next day)')
+
+plt.gca().set(title='ARIMAX-GARCH and naive forecast against actual values of Cushing OK WTI', xlabel='Date', ylabel='Spot Price FOB (Dollars per Barrel)')
+plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m-%d-%Y'))
+plt.gcf().autofmt_xdate()  # Rotation
+plt.margins(x=0)
+
+plt.legend()
+plt.show()
 
 print(results_df.round(4))
 print(f"Theil's U statistic: {theils_u:.4f}")

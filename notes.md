@@ -49,7 +49,9 @@ VIF check to confirm acceptable levels of multicollinearity
 	Weekly Cushing OK Ending Stocks excluding SPR of Crude Oil (Thousand Barrels) | VIF:   1.52 | safe
 	Europe Brent Spot Price FOB (Dollars per Barrel) | VIF:   1.36 | safe
 
-CCF plots to determine lags 0 11 11
+CCF plots to determine lags (8, 11, 11)
+
+![image](Figure_3.png)
 
 ARIMAX-GARCH model:
 heteroskedasticity: p(H) = 0.00, GARCH suitable for heteroskedastic time series 
@@ -61,12 +63,7 @@ use ACF and PACF plots to determine optimal parameters for ARIMA model - (1, 1, 
 
         ARIMAX Model  Naive Baseline
 Metric                              
-MAE           0.7486          1.3741
-RMSE          1.1809          1.5409
-Theil's U statistic: 0.5873 - significant improvement over baseline
+MAE           1.4282          1.4134
+RMSE          1.5552          1.5619
 
-
-
-to do list:
-
-try linear regression model
+Theil's U statistic: 0.9915 - improvement over baseline (minor)
